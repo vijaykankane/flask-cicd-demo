@@ -1,0 +1,716 @@
+# GitHub Actions CI/CD Workflow for Flask Application
+# This workflow provides enterprise-grade CI/CD with comprehensive testing,
+# security scanning, and automated deployments to staging and production
+
+name: 🚀 Flask CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, staging, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, staging ]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+          - skip
+      run_performance_tests:
+        description: 'Run performance tests'
+        required: false
+        default: false
+        type: boolean
+      custom_tag:
+        description: 'Custom Docker tag'
+        required: false
+        type: string
+
+# Environment variables available to all jobs
+env:
+  PYTHON_VERSION: '3.9'
+  DOCKER_REGISTRY: docker.io
+  DOCKER_REPOSITORY: ${{ github.repository_owner }}/flask-cicd-demo
+  NODE_VERSION: '18'
+
+# Concurrency control - cancel previous runs on same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Code Quality and Security Analysis
+  code-quality:
+    name: 🔍 Code Quality & Security
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      
+      - name: 🎨 Code Formatting Check (Black)
+        run: |
+          echo "🎨 Checking code formatting..."
+          black --check --diff --color .
+      
+      - name: 📐 Import Sorting Check (isort)
+        run: |
+          echo "📐 Checking import sorting..."
+          isort --check-only --diff --color .
+      
+      - name: 🔬 Linting (flake8)
+        run: |
+          echo "🔬 Running flake8 linting..."
+          flake8 . --max-line-length=88 --extend-ignore=E203,W503 \
+            --output-file=flake8-report.txt
+        continue-on-error: true
+      
+      - name: 📊 Advanced Linting (pylint)
+        run: |
+          echo "📊 Running pylint analysis..."
+          pylint *.py --output-format=text --reports=yes > pylint-report.txt || true
+      
+      - name: 🛡️ Security Analysis (Bandit)
+        run: |
+          echo "🛡️ Running security analysis..."
+          bandit -r . -f json -o bandit-report.json
+          bandit -r . -f txt -o bandit-report.txt
+        continue-on-error: true
+      
+      - name: 🔒 Dependency Vulnerability Check
+        run: |
+          echo "🔒 Checking for known vulnerabilities..."
+          safety check --json --output safety-report.json || true
+          safety check --output safety-report.txt || true
+      
+      - name: 📤 Upload Code Quality Reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: code-quality-reports
+          path: |
+            *-report.txt
+            *-report.json
+          retention-days: 30
+
+  # Job 2: Comprehensive Testing
+  test:
+    name: 🧪 Test Suite
+    runs-on: ubuntu-latest
+    needs: code-quality
+    if: always() && (needs.code-quality.result == 'success' || needs.code-quality.result == 'skipped')
+    
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+      fail-fast: false
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      
+      - name: 🧪 Run Tests with Coverage
+        run: |
+          echo "🧪 Running comprehensive test suite..."
+          pytest test_app.py \
+            --verbose \
+            --tb=short \
+            --cov=app \
+            --cov-report=html:htmlcov \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            --junitxml=pytest-results.xml
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+      
+      - name: 📊 Coverage Report
+        run: |
+          echo "📊 Generating coverage summary..."
+          coverage report --show-missing
+      
+      - name: 📤 Upload Coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: matrix.python-version == '3.9'
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+      
+      - name: 📤 Upload Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-results-py${{ matrix.python-version }}
+          path: |
+            pytest-results.xml
+            coverage.xml
+            htmlcov/
+          retention-days: 30
+
+  # Job 3: Build and Push Docker Image
+  build:
+    name: 🐳 Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [code-quality, test]
+    if: always() && needs.test.result == 'success'
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: 🔐 Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      
+      - name: 📋 Extract Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-,suffix=-{{date 'YYYYMMDD'}},format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: 🏗️ Build and Push Docker Image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            BUILD_VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+            VCS_REF=${{ github.sha }}
+      
+      - name: 🔍 Run Trivy Vulnerability Scanner
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: 📤 Upload Trivy Scan Results
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Job 4: Deploy to Staging
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      always() && 
+      needs.build.result == 'success' && 
+      (github.ref == 'refs/heads/staging' || 
+       github.ref == 'refs/heads/main' ||
+       github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.example.com
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Configure AWS Credentials
+        if: false  # Enable when using AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: 🚀 Deploy to Staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          
+          # Create deployment configuration
+          cat > docker-compose.staging.yml << EOF
+          version: '3.8'
+          services:
+            flask-app:
+              image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}
+              ports:
+                - "5000:5000"
+              environment:
+                - FLASK_ENV=staging
+                - BUILD_NUMBER=${{ github.run_number }}
+                - GIT_COMMIT=${{ github.sha }}
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+          EOF
+          
+          echo "📋 Deployment configuration created"
+          echo "🎯 Target: staging.example.com"
+          echo "📦 Image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}"
+          
+          # In a real environment, deploy using:
+          # kubectl apply -f k8s-staging/
+          # or docker-compose -f docker-compose.staging.yml up -d
+          # or terraform apply -var="image_tag=${{ github.sha }}"
+          
+          echo "✅ Staging deployment completed"
+      
+      - name: 🧪 Staging Health Check
+        run: |
+          echo "🧪 Running staging health checks..."
+          
+          # Simulate health check
+          for i in {1..30}; do
+            echo "🔍 Health check attempt $i/30..."
+            # In real environment:
+            # curl -f https://staging.example.com/health
+            sleep 2
+            if [ $i -eq 5 ]; then
+              echo "✅ Staging service is healthy"
+              break
+            fi
+          done
+      
+      - name: 📤 Deployment Notification
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const status = '${{ job.status }}' === 'success' ? '✅ SUCCESS' : '❌ FAILED';
+            const body = `
+            ## 🚀 Staging Deployment ${status}
+            
+            **📋 Deployment Details:**
+            - **Environment:** Staging
+            - **Image:** \`${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}\`
+            - **Commit:** \`${{ github.sha }}\`
+            - **Branch:** \`${{ github.ref_name }}\`
+            - **Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            ${status === '✅ SUCCESS' ? 
+              '🌐 **Staging URL:** https://staging.example.com' : 
+              '⚠️ **Action Required:** Check deployment logs for errors'
+            }
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number || 1,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Job 5: Deploy to Production
+  deploy-production:
+    name: 🎯 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, deploy-staging]
+    if: |
+      always() && 
+      needs.build.result == 'success' && 
+      (startsWith(github.ref, 'refs/tags/v') || 
+       github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://production.example.com
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: ⏳ Production Deployment Approval
+        uses: trstringer/manual-approval@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ${{ secrets.PRODUCTION_APPROVERS }}
+          minimum-approvals: 2
+          issue-title: "🎯 Production Deployment Approval Required"
+          issue-body: |
+            ## 🚀 Production Deployment Request
+            
+            **📋 Release Information:**
+            - **Version:** ${{ github.ref_name }}
+            - **Image:** `${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}`
+            - **Commit:** `${{ github.sha }}`
+            - **Author:** @${{ github.actor }}
+            
+            **🔍 Pre-deployment Checklist:**
+            - [ ] All tests passed ✅
+            - [ ] Security scan completed ✅
+            - [ ] Staging deployment successful ✅
+            - [ ] Performance tests acceptable
+            - [ ] Database migrations ready (if applicable)
+            - [ ] Monitoring alerts configured
+            - [ ] Rollback plan confirmed
+            
+            **👥 Required Approvals:** 2
+            **⏰ Timeout:** 24 hours
+            
+            Please review the deployment and approve if ready for production.
+      
+      - name: 🎯 Deploy to Production
+        run: |
+          echo "🎯 Starting production deployment..."
+          
+          # Create production deployment configuration
+          cat > docker-compose.production.yml << EOF
+          version: '3.8'
+          services:
+            flask-app:
+              image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}
+              ports:
+                - "80:5000"
+              environment:
+                - FLASK_ENV=production
+                - BUILD_NUMBER=${{ github.run_number }}
+                - GIT_COMMIT=${{ github.sha }}
+              restart: unless-stopped
+              deploy:
+                replicas: 3
+                resources:
+                  limits:
+                    memory: 512M
+                    cpus: "0.5"
+                  reservations:
+                    memory: 256M
+                    cpus: "0.25"
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+                interval: 30s
+                timeout: 10s
+                retries: 5
+                start_period: 60s
+          EOF
+          
+          echo "📋 Production deployment configuration created"
+          echo "🎯 Target: production.example.com"
+          echo "📦 Image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}"
+          
+          # Blue-green deployment simulation
+          echo "🔄 Implementing blue-green deployment..."
+          echo "1. Deploying to green environment..."
+          echo "2. Running health checks..."
+          echo "3. Switching traffic to green..."
+          echo "4. Monitoring for 5 minutes..."
+          echo "5. Decommissioning blue environment..."
+          
+          echo "✅ Production deployment completed successfully"
+      
+      - name: 📊 Post-deployment Monitoring
+        run: |
+          echo "📊 Starting post-deployment monitoring..."
+          
+          # Monitor key metrics for 5 minutes
+          for i in {1..10}; do
+            echo "📈 Monitoring cycle $i/10..."
+            # In real environment, check:
+            # - Application health endpoints
+            # - Error rates
+            # - Response times
+            # - Resource utilization
+            # - Business metrics
+            sleep 30
+          done
+          
+          echo "✅ Post-deployment monitoring completed"
+      
+      - name: 🎉 Production Success Notification
+        if: success()
+        run: |
+          echo "🎉 Production deployment successful!"
+          echo "🌐 Application URL: https://production.example.com"
+          echo "📊 Monitoring: https://monitoring.example.com"
+          echo "📈 Metrics: https://metrics.example.com"
+
+  # Job 6: Performance Testing (Optional)
+  performance-test:
+    name: 📊 Performance Testing
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: |
+      always() && 
+      needs.deploy-staging.result == 'success' &&
+      (github.event.inputs.run_performance_tests == 'true' ||
+       startsWith(github.ref, 'refs/tags/v'))
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install locust requests
+      
+      - name: 🚀 Run Performance Tests
+        run: |
+          echo "📊 Running performance tests against staging..."
+          
+          # Create comprehensive load test
+          cat > locustfile.py << 'EOF'
+          from locust import HttpUser, task, between
+          import json
+          import random
+          
+          class FlaskAppUser(HttpUser):
+              wait_time = between(1, 3)
+              
+              def on_start(self):
+                  """Called when user starts"""
+                  pass
+              
+              @task(3)
+              def home_page(self):
+                  """Test home page load"""
+                  with self.client.get("/", catch_response=True) as response:
+                      if response.status_code == 200:
+                          response.success()
+                      else:
+                          response.failure(f"Home page failed: {response.status_code}")
+              
+              @task(2)
+              def health_check(self):
+                  """Test health endpoint"""
+                  with self.client.get("/health", catch_response=True) as response:
+                      if response.status_code == 200:
+                          data = response.json()
+                          if data.get("status") == "healthy":
+                              response.success()
+                          else:
+                              response.failure("Health check failed")
+                      else:
+                          response.failure(f"Health endpoint failed: {response.status_code}")
+              
+              @task(2)
+              def api_status(self):
+                  """Test API status endpoint"""
+                  self.client.get("/api/status")
+              
+              @task(1)
+              def api_version(self):
+                  """Test API version endpoint"""
+                  self.client.get("/api/version")
+              
+              @task(1)
+              def api_echo(self):
+                  """Test API echo endpoint"""
+                  test_data = {
+                      "message": f"test-{random.randint(1, 1000)}",
+                      "timestamp": "2024-01-01T00:00:00Z"
+                  }
+                  self.client.post("/api/echo", json=test_data)
+          EOF
+          
+          # Run performance test
+          echo "🚀 Starting load test..."
+          locust -f locustfile.py \
+            --headless \
+            --users 50 \
+            --spawn-rate 5 \
+            --host https://staging.example.com \
+            --run-time 300s \
+            --html performance-report.html \
+            --csv performance-results || echo "Performance test completed with warnings"
+          
+          echo "📊 Performance test completed"
+      
+      - name: 📤 Upload Performance Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: performance-results
+          path: |
+            performance-report.html
+            performance-results_*.csv
+          retention-days: 30
+      
+      - name: 📊 Performance Summary
+        if: always()
+        run: |
+          echo "📊 Performance Test Summary:"
+          if [ -f "performance-results_stats.csv" ]; then
+            echo "=== Request Statistics ==="
+            cat performance-results_stats.csv
+            echo ""
+            echo "=== Response Time Distribution ==="
+            cat performance-results_stats_history.csv | tail -5
+          fi
+
+  # Job 7: Security Scan (Advanced)
+  security-scan:
+    name: 🛡️ Advanced Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      always() && 
+      needs.build.result == 'success' &&
+      github.event_name != 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: 🔍 Run CodeQL Analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: python
+          queries: security-extended,security-and-quality
+      
+      - name: 🏗️ Autobuild
+        uses: github/codeql-action/autobuild@v2
+      
+      - name: 📊 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:python"
+      
+      - name: 🔍 OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'flask-cicd-demo'
+          path: '.'
+          format: 'ALL'
+          args: >
+            --enableRetired
+            --enableExperimental
+            --out reports
+      
+      - name: 📤 Upload Security Reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: reports/
+          retention-days: 30
+
+  # Job 8: Cleanup and Notifications
+  cleanup-notify:
+    name: 🧹 Cleanup & Notifications
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production, performance-test, security-scan]
+    if: always()
+    
+    steps:
+      - name: 🧹 Cleanup Artifacts
+        run: |
+          echo "🧹 Performing cleanup tasks..."
+          # In real environment:
+          # - Clean up temporary resources
+          # - Remove old Docker images
+          # - Archive logs
+          # - Update monitoring dashboards
+          echo "✅ Cleanup completed"
+      
+      - name: 📧 Send Notification Email
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: |
+            ${{ job.status == 'success' && '✅' || '❌' }} 
+            Flask CI/CD Pipeline - ${{ github.ref_name }} 
+            (Build #${{ github.run_number }})
+          body: |
+            ## 🚀 Flask CI/CD Pipeline Report
+            
+            **📋 Pipeline Information:**
+            - **Status:** ${{ job.status == 'success' && '✅ SUCCESS' || '❌ FAILED' }}
+            - **Branch/Tag:** `${{ github.ref_name }}`
+            - **Commit:** `${{ github.sha }}`
+            - **Actor:** @${{ github.actor }}
+            - **Run Number:** #${{ github.run_number }}
+            
+            **🎯 Deployment Status:**
+            - **Staging:** ${{ needs.deploy-staging.result || 'Skipped' }}
+            - **Production:** ${{ needs.deploy-production.result || 'Skipped' }}
+            
+            **🔍 Quality Checks:**
+            - **Performance Test:** ${{ needs.performance-test.result || 'Skipped' }}
+            - **Security Scan:** ${{ needs.security-scan.result || 'Skipped' }}
+            
+            **🔗 Links:**
+            - [Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Commit Details](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            
+            ---
+            *Automated notification from GitHub Actions*
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: GitHub Actions <noreply@github.com>
+      
+      - name: 📊 Update Status Badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "📊 Updating status badge..."
+          # Create status badge JSON
+          STATUS="${{ job.status == 'success' && 'passing' || 'failing' }}"
+          COLOR="${{ job.status == 'success' && 'brightgreen' || 'red' }}"
+          echo "Status: $STATUS, Color: $COLOR"
+          # In real environment, update badge service or README

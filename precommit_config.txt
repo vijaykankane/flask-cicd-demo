@@ -1,0 +1,278 @@
+# Pre-commit hooks configuration for Flask CI/CD Demo
+# This file defines automated code quality checks that run before each commit
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # File format and structure checks
+      - id: trailing-whitespace
+        name: Trim Trailing Whitespace
+        description: Remove trailing whitespace from files
+      
+      - id: end-of-file-fixer
+        name: Fix End of Files
+        description: Ensure files end with a newline
+      
+      - id: check-merge-conflict
+        name: Check for Merge Conflicts
+        description: Check for merge conflict markers
+      
+      - id: check-yaml
+        name: Check YAML Syntax
+        description: Validate YAML files syntax
+        files: \.(yaml|yml)$
+      
+      - id: check-json
+        name: Check JSON Syntax
+        description: Validate JSON files syntax
+        files: \.json$
+      
+      - id: check-toml
+        name: Check TOML Syntax
+        description: Validate TOML files syntax
+        files: \.toml$
+      
+      - id: check-xml
+        name: Check XML Syntax
+        description: Validate XML files syntax
+        files: \.xml$
+      
+      # Python-specific checks
+      - id: check-ast
+        name: Check Python AST
+        description: Check Python files for valid abstract syntax tree
+        files: \.py$
+      
+      - id: debug-statements
+        name: Check for Debug Statements
+        description: Check for debugger imports and breakpoints
+        files: \.py$
+      
+      - id: fix-byte-order-marker
+        name: Fix UTF-8 Byte Order Marker
+        description: Remove UTF-8 byte order marker
+      
+      # File size and content checks
+      - id: check-added-large-files
+        name: Check for Large Files
+        description: Prevent files larger than 500KB from being committed
+        args: ['--maxkb=500']
+      
+      - id: check-case-conflict
+        name: Check for Case Conflicts
+        description: Check for case-insensitive filename conflicts
+      
+      # Security checks
+      - id: detect-private-key
+        name: Detect Private Keys
+        description: Check for private keys in files
+      
+      - id: check-executables-have-shebangs
+        name: Check Executable Shebangs
+        description: Ensure executable files have shebangs
+      
+      - id: check-shebang-scripts-are-executable
+        name: Check Shebang Executables
+        description: Ensure files with shebangs are executable
+
+  # Python code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        name: Black Code Formatter
+        description: Format Python code with Black
+        language_version: python3
+        args: [--line-length=88]
+        files: \.py$
+
+  # Python import sorting with isort
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        name: Sort Python Imports
+        description: Sort Python imports with isort
+        args: [--profile=black, --line-length=88]
+        files: \.py$
+
+  # Python linting with flake8
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.1.0
+    hooks:
+      - id: flake8
+        name: Flake8 Linter
+        description: Lint Python code with flake8
+        args: [
+          --max-line-length=88,
+          --extend-ignore=E203,W503,
+          --max-complexity=10
+        ]
+        files: \.py$
+        additional_dependencies: [
+          flake8-docstrings,
+          flake8-bugbear,
+          flake8-comprehensions,
+          flake8-simplify,
+        ]
+
+  # Security scanning with Bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        name: Bandit Security Scanner
+        description: Scan Python code for security vulnerabilities
+        args: [-f, json, -o, bandit-report.json]
+        files: \.py$
+        exclude: ^tests/|^test_
+
+  # Python docstring formatting
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        name: Python Docstring Style
+        description: Check Python docstring style
+        args: [--convention=google]
+        files: \.py$
+        exclude: ^tests/|^test_
+
+  # Type checking with MyPy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.1
+    hooks:
+      - id: mypy
+        name: MyPy Type Checker
+        description: Static type checking for Python
+        files: \.py$
+        args: [--ignore-missing-imports, --python-version=3.9]
+        additional_dependencies: [types-requests, types-Flask]
+
+  # Python dependency safety check
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.3.2
+    hooks:
+      - id: python-safety-dependencies-check
+        name: Safety Dependency Check
+        description: Check Python dependencies for known security vulnerabilities
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        name: Dockerfile Linter
+        description: Lint Dockerfile with hadolint
+        files: Dockerfile
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        name: YAML Linter
+        description: Lint YAML files
+        args: [-d, relaxed]
+        files: \.(yaml|yml)$
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        name: Shell Script Linter
+        description: Lint shell scripts with shellcheck
+        files: \.(sh|bash)$
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        name: Markdown Linter
+        description: Lint Markdown files
+        args: [--disable, MD013, MD033]  # Disable line length and HTML rules
+        files: \.md$
+
+  # Commit message linting
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: 3.13.0
+    hooks:
+      - id: commitizen
+        name: Conventional Commits
+        description: Check commit message format
+        stages: [commit-msg]
+
+  # Git hooks for better commit practices
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: no-commit-to-branch
+        name: Prevent Direct Commits to Main
+        description: Prevent commits directly to main/master branch
+        args: [--branch=main, --branch=master]
+
+  # Python requirements.txt sorting and formatting
+  - repo: https://github.com/asottile/reorder_python_imports
+    rev: v3.12.0
+    hooks:
+      - id: reorder-python-imports
+        name: Reorder Python Imports
+        description: Reorder Python imports
+        files: \.py$
+        args: [--py36-plus]
+
+  # Remove unused imports and variables
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.2.1
+    hooks:
+      - id: autoflake
+        name: Remove Unused Imports
+        description: Remove unused imports and variables
+        args: [
+          --in-place,
+          --remove-all-unused-imports,
+          --remove-unused-variables,
+          --remove-duplicate-keys,
+          --ignore-init-module-imports
+        ]
+        files: \.py$
+
+  # JSON formatting
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        name: Prettier Formatter
+        description: Format JSON, YAML, and Markdown files
+        files: \.(json|yaml|yml|md)$
+        args: [--write, --prose-wrap=always]
+
+# Global configuration
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_stages: [commit]
+
+# Configuration for specific tools
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+    
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: [python-safety-dependencies-check, mypy]  # Skip slow hooks on CI
+  submodules: false
+
+# Usage instructions:
+# 1. Install pre-commit: pip install pre-commit
+# 2. Install hooks: pre-commit install
+# 3. Run on all files: pre-commit run --all-files
+# 4. Update hooks: pre-commit autoupdate
+# 5. Skip hooks: SKIP=flake8,mypy git commit -m "message"
+# 6. Run specific hook: pre-commit run black --all-files

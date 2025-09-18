@@ -1,0 +1,433 @@
+# Flask CI/CD Demo - Git Ignore Configuration
+# This file specifies patterns for files and directories that should not be tracked by Git
+
+# ================================
+# Python-specific ignores
+# ================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+pytest-results.xml
+test-results.xml
+
+# Translations
+*.mo
+*.pot
+
+# Flask instance folder
+instance/
+
+# Scrapy stuff
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# ================================
+# Flask-specific ignores
+# ================================
+
+# Flask session files
+flask_session/
+
+# Flask migrations
+migrations/
+
+# Application logs
+*.log
+logs/
+app.log
+
+# ================================
+# Docker-specific ignores
+# ================================
+
+# Docker files (keep docker-compose and Dockerfile)
+.dockerignore
+
+# ================================
+# CI/CD-specific ignores
+# ================================
+
+# Jenkins
+.jenkins/
+jenkins_home/
+
+# GitHub Actions (keep workflow files, ignore cache/artifacts)
+.github/workflows/.cache/
+
+# Build artifacts
+build-artifacts/
+artifacts/
+
+# Test reports
+*-report.txt
+*-report.json
+*-report.html
+bandit-report.*
+safety-report.*
+flake8-report.*
+pylint-report.*
+performance-report.*
+performance-results_*.csv
+security-reports/
+code-quality-reports/
+
+# Locust performance testing
+locustfile.py
+
+# ================================
+# Development tools
+# ================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Atom
+.atom/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ================================
+# OS-specific ignores
+# ================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# macOS thumbnails
+._*
+
+# macOS directories
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# macOS directories in network stores
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+# Windows dump file
+*.stackdump
+
+# Windows folder config file
+[Dd]esktop.ini
+
+# Windows Recycle Bin
+$RECYCLE.BIN/
+
+# Windows installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# Linux
+*~
+
+# Temporary files
+.fuse_hidden*
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder
+.Trash-*
+
+# .nfs files
+.nfs*
+
+# ================================
+# Security-sensitive files
+# ================================
+
+# Environment variables
+.env.*
+.environment
+environment.py
+
+# Secrets and configuration
+secrets/
+config/local.py
+local_settings.py
+
+# SSL certificates and keys
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+ssl/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files with potential secrets
+config.json
+config.yaml
+config.yml
+.config
+
+# ================================
+# Backup files
+# ================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.tmp
+
+# ================================
+# Cloud and deployment
+# ================================
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# AWS
+.aws/
+
+# Google Cloud
+.gcloud/
+
+# Kubernetes
+kubeconfig
+
+# Helm
+.helm/
+
+# ================================
+# Monitoring and logging
+# ================================
+
+# Prometheus data
+prometheus-data/
+
+# Grafana data
+grafana-data/
+
+# Application logs
+access.log
+error.log
+app.log
+gunicorn.log
+
+# ================================
+# Dependencies and packages
+# ================================
+
+# Node.js (if using any JS tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ruby (if using any Ruby tools)
+Gemfile.lock
+
+# Go (if using any Go tools)
+go.mod
+go.sum
+
+# ================================
+# Custom application ignores
+# ================================
+
+# Custom temporary files
+temp/
+tmp/
+scratch/
+
+# User uploads
+uploads/
+user-data/
+
+# Cache directories
+.cache/
+cache/
+
+# PIDs
+*.pid
+
+# Lock files
+*.lock
+
+# ================================
+# Keep these files (explicit inclusion)
+# ================================
+
+# Important: Use ! to explicitly include files if needed
+!.github/workflows/
+!requirements*.txt
+!Dockerfile
+!docker-compose*.yml
+!Jenkinsfile
+!README.md
+!LICENSE
+
+# ================================
+# Project-specific ignores
+# ================================
+
+# Add any project-specific files/directories that should be ignored
+# Example:
+# custom-config/
+# project-specific-temp/
